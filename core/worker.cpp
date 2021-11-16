@@ -83,8 +83,18 @@ void run_workload_with_op_measurement(const char *task, ClientFactory *factory, 
 
 	/* start running workload */
 	measurement.set_max_progress(max_progress);
+	/*
+	 * Pin workers to core 0 to avoid interfering with the eviction thread.
+	 * See: https://eli.thegreenplace.net/2016/c11-threads-affinity-and-hyperthreading/
+	 */
+	cpu_set_t cpuset;
+	CPU_ZERO(&cpuset);
+	CPU_SET(0, &cpuset);
 	for (int thread_index = 0; thread_index < nr_thread; ++thread_index) {
 		thread_arr[thread_index] = new std::thread(worker_thread_fn, client_arr[thread_index], workload_arr[thread_index], &measurement, next_op_interval_ns);
+
+		pthread_setaffinity_np(thread_arr[thread_index]->native_handle(),
+							   sizeof(cpu_set_t), &cpuset);
 	}
 	std::thread stat_thread(monitor_thread_fn, task, &measurement);
 	for (int thread_index = 0; thread_index < nr_thread; ++thread_index) {
